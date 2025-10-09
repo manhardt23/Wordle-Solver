@@ -17,19 +17,32 @@ class game:
     def letter_coloring(guess, secret_word):
         # method determines the value of each letter in the guessed word.
         current_values = ""
-        used_letters = []
+        secret_letter_counts = {}
+        
+        # Count occurrences of each letter in secret_word
+        for letter in secret_word:
+            secret_letter_counts[letter] = secret_letter_counts.get(letter, 0) + 1
+        
+        # First pass: mark all greens (correct position)
         for i in range(5):
             if guess[i] == secret_word[i]:
                 current_values += "2"
-                used_letters.append(guess[i])
-            elif guess[i] in secret_word and guess[i] not in used_letters:
-                    current_values += "1"
-                    used_letters.append(guess[i])
-
+                secret_letter_counts[guess[i]] -= 1
             else:
-                    current_values += "0"
-    
-        return current_values
+                current_values += "?"  # Placeholder
+        
+        # Second pass: mark yellows and grays
+        result = ""
+        for i in range(5):
+            if current_values[i] == "2":
+                result += "2"
+            elif guess[i] in secret_letter_counts and secret_letter_counts[guess[i]] > 0:
+                result += "1"
+                secret_letter_counts[guess[i]] -= 1
+            else:
+                result += "0"
+        
+        return result
 
     
     
@@ -55,40 +68,92 @@ class bot():
             bot.remaining_letters.update({i : alphabet})
         return bot.remaining_letters
     
-    def remove_words(word_list_recycle, guess_list, current_values, secret_word):
+    def remove_words(word_list_recycle, guess_list, current_values):
         new_list = []
+        
         for word in word_list_recycle:
             match = True
-            for i, (letter, value) in enumerate(zip(guess_list, current_values)):
-                if  (value == '2' and word[i] != letter):
-                    match = False
-                    break
-                elif(value == '1' and (word[i] == letter or letter not in word)):
-                    match = False
-                    break
-                elif(value == '0' and letter in word):
-                    match = False
-                    break
-
-            if (match) and (word not in new_list):
-                new_list.append(word)
-                
-        return new_list
-                
             
-    def select_word(count, current_values, secret_word):
-        remaining_words = bot.remove_words(bot.word_list_recycle, bot.guess_list, current_values, secret_word)
-        #print(f"{bot.value_at_index}")
-        #print(f"{remaining_words}")
+            for i in range(len(guess_list)):
+                letter = guess_list[i]
+                value = current_values[i]
+                
+                if value == '2':
+                    if word[i] != letter:
+                        match = False
+                        break
+                        
+                elif value == '1':
+                    if word[i] == letter or letter not in word:
+                        match = False
+                        break
+                        
+                elif value == '0':
+                    has_green_or_yellow = any(
+                        guess_list[j] == letter and current_values[j] in ['1', '2']
+                        for j in range(len(current_values))
+                    )
+                    
+                    if not has_green_or_yellow:
+                        if letter in word:
+                            match = False
+                            break
+
+            if match:
+                new_list.append(word)
+                    
+        return new_list
+    
+    def calculate_position_frequencies():
+        """Calculate letter frequency at each position from remaining words"""
+        position_freq = [{} for _ in range(5)]
+        
+        for word in bot.word_list_recycle:
+            for i, letter in enumerate(word):
+                position_freq[i][letter] = position_freq[i].get(letter, 0) + 1
+        
+        return position_freq
+
+    def score_word(word, position_freq):
+        """Score a word based on position-specific letter frequencies"""
+        score = 0
+        seen = set()
+        
+        for i, letter in enumerate(word):
+            # Add position-specific frequency
+            score += position_freq[i].get(letter, 0)
+            
+            # Bonus for unique letters (avoid duplicates)
+            if letter not in seen:
+                score += 10  # Bonus for letter diversity
+                seen.add(letter)
+        
+        return score
+                
+    def select_word(count, current_values):
+        remaining_words = bot.remove_words(bot.word_list_recycle, bot.guess_list, current_values)
         bot.value_at_index.clear()
         bot.word_list_recycle = remaining_words
-        #if secret_word not in remaining_words:
-            #print(False)
+        
         if len(remaining_words) == 0:
-            #print(f"fucked\n")
             return "messed up"
-        return random.choice(remaining_words)
-
+        
+        if len(remaining_words) == 1:
+            return remaining_words[0]
+        
+        # Calculate position frequencies from remaining words
+        position_freq = bot.calculate_position_frequencies()
+        
+        # Score all remaining words
+        scored_words = []
+        for word in remaining_words:
+            score = bot.score_word(word, position_freq)
+            scored_words.append((word, score))
+        
+        # Sort by score (highest first) and return best word
+        scored_words.sort(key=lambda x: x[1], reverse=True)
+        return scored_words[0][0]
+    
 failed = 0
 mess = 0
 guessed = 0
@@ -108,9 +173,9 @@ def main():
         if count == 1:
             bot.set_word_list_recycled()
             bot.indexed_dict_starter()
-            guess = "louie"
+            guess = "crane"
         if count > 1:
-            guess = bot.select_word(count, current_values, secret_word)
+            guess = bot.select_word(count, current_values)
         #print(f"{guess}")
         if(guess not in words):
             global mess
