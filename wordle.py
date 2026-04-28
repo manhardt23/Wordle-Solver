@@ -157,10 +157,23 @@ class bot():
 failed = 0
 mess = 0
 guessed = 0
+total_guesses_on_wins = 0
 
-def main():              
+
+def reset_counters():
+    global failed
+    global mess
+    global guessed
+    global total_guesses_on_wins
+    failed = 0
+    mess = 0
+    guessed = 0
+    total_guesses_on_wins = 0
+
+def main(secret_word=None):
     words = game.word_list()
-    secret_word = game.get_Secret_Word(words)
+    if secret_word is None:
+        secret_word = game.get_Secret_Word(words)
     count = 0
     
     while(True):
@@ -168,7 +181,7 @@ def main():
         if(count > 6):
             global failed 
             failed += 1
-            break
+            return {"status": "failed", "guesses": 6}
         #print(f"Guess number {count} \n")
         if count == 1:
             bot.set_word_list_recycled()
@@ -182,12 +195,14 @@ def main():
             count -= 1
             mess += 1
             #print(f"the inputted word is not valid")
-            break
+            return {"status": "error", "guesses": count}
         if(guess == secret_word):
             global guessed
+            global total_guesses_on_wins
             #print(f"You have Guessed the secret word {secret_word}")
             guessed += 1
-            break
+            total_guesses_on_wins += count
+            return {"status": "win", "guesses": count}
         bot.guess_list = guess
         current_values = game.letter_coloring(guess, secret_word)
         #print(f"{current_values}")
@@ -195,10 +210,31 @@ def main():
 
     #print(f"The secret word is {secret_word}")
 
-if __name__ == "__main__":
-    run = 100
-    for i in range(run):
-        #print(f'New Run')
+
+def run_simulation(run_count):
+    reset_counters()
+    for i in range(run_count):
         main()
-        #print(f'run complete {i + 1}')
-    print(f"\nWe won {guessed} we failed to guess correct {failed} time and we messed up in the code {mess} times\n")
+
+    solve_rate = (guessed / run_count) * 100 if run_count else 0
+    avg_guesses_on_wins = (total_guesses_on_wins / guessed) if guessed else 0
+    return {
+        "runs": run_count,
+        "wins": guessed,
+        "failed": failed,
+        "errors": mess,
+        "solve_rate": solve_rate,
+        "avg_guesses_on_wins": avg_guesses_on_wins
+    }
+
+if __name__ == "__main__":
+    run = 1000
+    stats = run_simulation(run)
+    print(
+        f"\nRuns: {stats['runs']}\n"
+        f"Wins: {stats['wins']}\n"
+        f"Failed: {stats['failed']}\n"
+        f"Errors: {stats['errors']}\n"
+        f"Solve rate: {stats['solve_rate']:.2f}%\n"
+        f"Average guesses on wins: {stats['avg_guesses_on_wins']:.2f}\n"
+    )
